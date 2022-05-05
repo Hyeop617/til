@@ -1,4 +1,4 @@
-# 220503 - JPA save() deep-dive (1)
+# 220505 - JPA save() deep-dive (1)
 
 JPA를 사용할 때 그런가보다 했던 부분을 더 깊게 파보자.
 
