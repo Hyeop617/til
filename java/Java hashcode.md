@@ -4,13 +4,18 @@
 
 ### Identity hash code
 
-> the identity hash code is a value decided by the JVM that's constant over the lifetime of an object and can not be influenced by Java code. (i.e. `hashCode()` has no effect on this) This value can be gotten by calling `System.identityHashCode(obj)`
+> the identity hash code is a value decided by the JVM that's constant over the lifetime of an object and can not be influenced by Java code.
+> (i.e. `hashCode()` has no effect on this) This value can be gotten by calling `System.identityHashCode(obj)`
 >
 > https://stackoverflow.com/questions/76219209/how-is-a-32-bit-hashcode-stored-in-a-25-bit-mark-word-in-java-without-data-loss
 
 > 주어진 객체의 클래스가 hashCode() 를 재정의하는지 여부에 관계없이 기본 메서드 hashCode() 가 반환하는 것과 동일한 객체에 대해 동일한 해시 코드를 반환합니다. Null 참조의 해시 코드는 0입니다.
 >
 > javadoc
+
+>The identity hash code won’t change for an object during its lifetime. Therefore, **the HotSpot JVM stores this value in the mark word once it’s computed.**
+>
+>https://www.baeldung.com/java-memory-layout
 
 ```java
 public static native int identityHashCode(Object x);
@@ -300,3 +305,12 @@ class markWord {
 inline intptr_t mask_bits      (intptr_t  x, intptr_t m) { return x & m; }
 ```
 
+
+
+
+
+##### refrernce
+
+https://stackoverflow.com/questions/76219209/how-is-a-32-bit-hashcode-stored-in-a-25-bit-mark-word-in-java-without-data-loss
+
+https://incheol-jung.gitbook.io/docs/q-and-a/java/hashcode-equals

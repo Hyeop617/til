@@ -16,32 +16,97 @@ OOP는 JVM의 힙 메모리에서 객체를 가리키며, 객체의 실제 데�
 C에서는 malloc를 이용해 메모리 확보를 함. 이 때 시스템 콜이 발생해 오버헤드 발생.
 그러나 자바에선 JVM이 확보한 힙 메모리에 할당하므로 시스템 콜 호출할 필요가 없음.
 
+---
+
 ## instanceOOP
 
 일반적인 인스턴스를 가리킬 때 사용되는 OOP.
 예를 들어, `new Integer(42)`와 같은 객체 인스턴스는 `InstanceOOP`로 참조됨.
 
-- mark word
-- klass word
-- data
+- mark word (4 bytes in 32bit, 8 bytes in 64bit)
+- klass word (4 bytes in 32bit, 64bit w/ compressedOOPs, 8 bytes in 64bit)
+- (Optional) padding (4 bytes in 64bit w/ compressedOOPs)
+- data w/ padding
 
 이렇게 Mark Word와 Klass Word라는 헤더와 실제 데이터 총 3가지로 구성
 
-#### Mark Word
+## arrayOOP
 
-인스턴스의 메타데이터를 가리키는 포인터. 해시코드를 포함. 32비트에서는 다음처럼 구성
+배열을 가리킬때 사용되는 OOP
+예를 들어, `new int[10]`과 같은 배열은 arrayOOP로 참조됨.
 
-- 25 bit: hashcode
-- 4 bit: age (GC에서 몇 번 살아남았는지에 대한 정보)
-- 1 bit: biased_lock
-- 2 bit: lock
+- mark word
+- klass word
+- **array length (4 bytes)**
+- array elements data w/ padding
 
-​	[jdk 8 source](http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/oops/markOop.hpp)
-​	[Hotspot opened 15 source](https://github.com/openjdk/jdk15/blob/e208d9aa1f185c11734a07db399bab0be77ef15f/src/hotspot/share/oops/oop.hpp#L56)
+
+
+### Mark Word
+
+인스턴스의 메타데이터를 가리키는 포인터. cpp파일을 참조하면 uintptr_t를 사용하고 있음.
+따라서 32비트에선 4바이트, 64비트에선 8바이트를 차지
+
+##### 32bit (4 bytes)
+
+######  jdk 8 normal state
+
+`|---- identity hash code ----|-- age --|- biased_lock -|- lock -|`
+`|-------------25-------------|----4----|-------1-------|---2----|`
+
+age: GC에서 몇 번 살아남았는지에 대한 정보
+
+###### jdk 21 normal state
+
+`|---- identity hash code ----|-- age --|- unused_gap -|- lock -|`
+`|-------------25-------------|----4----|------1-------|---2----|`
+
+
+
+##### 64bit (8 bytes) w/o compressedOOPs
+
+###### jdk 8 normal state
+
+`|---- unused ----|---- identity hash code ----|- unused_gap -|-- age --|- biased_lock -|- lock -|`
+`|-------25-------|-------------31-------------|-------1------|----4----|-------1-------|----2---|`
+
+###### jdk 21 normal state
+
+`|---- unused ----|---- identity hash code ----|- unused_gap -|-- age --|- unused_gap -|- lock -|`
+`|-------25-------|-------------31-------------|-------1------|----4----|-------1------|----2---|`
+
+
+
+##### 64bit (8 bytes) w/ compressedOOPs
+
+###### jdk 8 normal state
+
+`|---- unused ----|---- identity hash code ----|- cms_free -|-- age --|- biased_lock -|- lock -|`
+`|-------25-------|-------------31-------------|------1-----|----4----|-------1-------|----2---|`
+
+###### 
+
+
+
+
+
+64 bit VM은 32비트보다 더 긴 해시값을 필요로 하지 않는다.
+-> hash_mask가 32비트라고 가정하고 있기 때문 -> 해시 테이블의 크기가 2^32라고 가정하고 있음
+
+
+
+
+
+
+
+
+
+[Hotspot Java 15 source](https://github.com/openjdk/jdk15/blob/e208d9aa1f185c11734a07db399bab0be77ef15f/src/hotspot/share/oops/oop.hpp#L56)
 
 #### Klass Word
 
-클래스의 메타 데이터를 가리키는 포인터. 클래스의 메타 정보에 대한 참조를 저장해둔 포인터. C++로 작성된 포인터
+클래스의 메타 데이터를 가리키는 포인터. 클래스의 메타 정보에 대한 참조를 저장해둔 포인터.
+자바 7까지는 Permanent Generation을 가리키고 있었음. 자바 8부터 metaspace를 가리키도록 변경
 
 ```java
 // Entry 인스턴스는 32bit JVM에서 총 24 byte를 사용.
@@ -78,7 +143,7 @@ static class Entry<K,V> implements Map.Entry<K,V> {
 ```java
 // Entry 인스턴스는 64bit JVM에서 총 48 byte를 사용.
 // Mark Word - 8 byte
-// Klass Word - 8 byte
+// Klass Word - 8 byte (w/o compressedOOPs)
 static class Entry<K,V> implements Map.Entry<K,V> {
     final K key;			// 8 byte reference
     V value;					// 8 byte reference
@@ -91,13 +156,28 @@ static class Entry<K,V> implements Map.Entry<K,V> {
 
 
 
-## KlassOOP
+### KlassOOP
 
 Java 클래스를 가리킬때 사용되는 OOP. 각 Java 클래스는 JVM에서 메타데이터를 포함하는 객체로 표현되며, 이는 해당 클래스의 모든 인스턴스가 공유하고 있음.
+
+- mark word (4 - 8 bytes)
+- klass word (4 - 8 bytes)
+- method vtable
+
+
 
 클래스의 필드, 메소드, 인터페이스 정보등이 포함되어 있음.
 
 인스턴스는 자신의 KlassOOP를 통해 클래스 메타데이터에 접근함.
+
+
+
+
+
+## Compressed OOPs
+
+64비트 시스템에선 java object reference의 크기가 32비트 보다 2배의 공간을 차지함.
+따라서 많은 메모리를 차지하고, 이 것은 잦은 GC의 원인이 됨. -> 성능 감소
 
 
 
@@ -108,4 +188,8 @@ Reference
 https://velog.io/@dev_dong07/Java-%EA%B0%9D%EC%B2%B4%EB%8A%94-%EC%96%B4%EB%96%BB%EA%B2%8C-%EC%9D%B4%EB%A3%A8%EC%96%B4%EC%A0%B8-%EC%9E%88%EC%9D%84%EA%B9%8C
 
 ChatGPT
+
 https://www.baeldung.com/java-memory-layout
+https://www.baeldung.com/jvm-compressed-oops
+
+https://www.logpresso.com/ko/blog/2017-01-12-auto-boxing-penalty
