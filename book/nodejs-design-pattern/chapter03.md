@@ -290,5 +290,78 @@ function findRegex(files, regex) {
             }
         })
     }
+    return emitter
+}
+
+findRegex(['file1.txt', 'file2.json'], /hello \w+/g)
+    .on('fileread', file => console.log(`${file} was read`))
+    .on('found', (file, match) => console.log(`Matched "${match}" in file ${file}`))
+    .on('error', err => console.error(`Error emitted: ${err.message}`))
+```
+
+### 오류 전파
+EventEmitter는 에러가 발생하면 error 이벤트를 발생시킴.<br>
+따라서 error 이벤트에 대한 리스너를 등록하지 않으면, Node.js는 프로세스를 종료함.<br>
+
+### 관찰 가능한(Observable) 객체 만들기
+Node.js에서는 EventEmitter를 상속하여 Observable 객체를 쉽게 만들 수 있음.<br>
+```js
+import { EventEmiiter } from 'events'
+import { readFile } from 'fs'
+
+class FindRegex extends EventEmitter {
+    constructor(regex) {
+        super()
+        this.regex = regex
+        this.files = []
+    }
+    
+    addFile(file) {
+        this.files.push(file)
+        return this
+    }
+    
+    find() {
+        for (const file of this.files) {
+            readFile(file, 'utf8', (err, data) => {
+                if (err) {
+                    return this.emit('error', err)
+                }
+                this.emit('fileread', file)
+                const matched = data.match(this.regex)
+                if (matched) {
+                    matched.forEach(element => this.emit('found', file, element))
+                }
+            })
+        }
+        return this
+    }
 }
 ```
+위의 FindRegex 클래스는 EventEmitter를 상속하여 완전한 Observable 객체를 만듦.<br>
+이 때 EventEmitter의 생성자를 호출하기 위해 super()를 호출해야 함.<br>
+```js
+const findRegexInstance = new FindRegex(/hello \w+/g)
+findRegexInstance
+    .addFile('file1.txt')
+    .addFile('file2.json')
+    .find()
+    .on('fileread', file => console.log(`${file} was read`))
+    .on('found', (file, match) => console.log(`Matched "${match}" in file ${file}`))
+    .on('error', err => console.error(`Error emitted: ${err.message}`))
+```
+이 패턴은 Node.js에서 널리 사용되며, 스트림 API도 EventEmitter를 상속하여 구현됨.
+
+### EventEmitter와 메모리 누수
+Observable 객체를 사용할 때 더 이상 사용하지 않는다면 리스너를 제거하는 것이 중요함.<br>
+만약 리스너를 제거하지 않는다면 메모리 누수가 발생할 수 있음.<br>
+EventEmitter의 removeListener() 메소드를 사용하여 리스너를 제거할 수 있음.<br>
+
+그리고 Node.js에서 EventEmitter는 기본적으로 최대 10개의 리스너만 허용함.<br>
+만약 리스너가 10개를 초과하면 경고 메세지를 출력하며, 이를 조정하려면 setMaxListeners() 메소드를 사용하면 됨.<br>
+
+또한 on() 메소드 대신 once() 메소드를 이용하여 한 번만 실행되는 리스너를 등록할 수도 있지만,<br>
+이벤트가 발생하지 않는 경우에는 리스너는 계속해서 메모리에 남아있게 되므로 주의해야 함.
+
+
+### 동기 및 비동기 이벤트
