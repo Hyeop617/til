@@ -145,9 +145,10 @@ public final class MemberServiceHelper {
   public static Member findExistingMember(MemberRepository repo, String memberId) {
     Member member = repo.findById(memberId);
     if (member == null) {
-        throw new IllegalArgumentException("member not found: " + memberId);
+      throw new IllegalArgumentException("member not found: " + memberId);
     }
     return member;
+  }
 }
 ```
 ### 응용 서비스의 인터페이스와 클래스
